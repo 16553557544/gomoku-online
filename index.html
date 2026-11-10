@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋室 · 联机五子棋</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e2c79a'/%3E%3Cg stroke='%236b4a28' stroke-width='1' opacity='.8'%3E%3Cpath d='M8 3v26M16 3v26M24 3v26M3 8h26M3 16h26M3 24h26'/%3E%3C/g%3E%3Ccircle cx='16' cy='16' r='5' fill='%23151a1c'/%3E%3C/svg%3E">
+<script src="https://fastly.jsdelivr.net/npm/goeasy@2.14.9/goeasy.min.js"></script>
+<style>
+:root{
+  --ink:#0a110f;
+  --panel:#121a17;
+  --panel-hi:#182220;
+  --line:#253330;
+  --paper:#ece7dc;
+  --muted:#8d998f;
+  --dim:#5c6660;
+  --brass:#c9a35b;
+  --brass-soft:#e2c690;
+  --brass-dim:#6d5831;
+  --ok:#7dc08a;
+  --warn:#d0795f;
+  --serif:"Songti SC","Source Han Serif SC","Noto Serif SC",Georgia,"Times New Roman",serif;
+  --sans:system-ui,-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;padding:0}
+body{
+  background:radial-gradient(130% 90% at 50% -20%,#16241f 0%,#0b1210 55%,#080d0c 100%);
+  background-attachment:fixed;
+  color:var(--paper);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+button,input{font-family:inherit}
+button{-webkit-tap-highlight-color:transparent}
+
+/* ===== 顶栏 ===== */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 16px;border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand .mark{flex:0 0 auto;width:30px;height:30px}
+.brand h1{
+  margin:0;font-family:var(--serif);font-size:19px;font-weight:600;
+  letter-spacing:.14em;line-height:1.1;white-space:nowrap;
+}
+.brand p{
+  margin:3px 0 0;font-size:11px;color:var(--dim);letter-spacing:.08em;white-space:nowrap;
+}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;
+  border-radius:999px;border:1px solid var(--line);background:var(--panel);
+  font-size:12px;color:var(--muted);cursor:pointer;flex:0 0 auto;
+}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--dim);transition:background .2s,box-shadow .2s}
+.chip.on{color:#b9cdbf;border-color:#2f4738}
+.chip.on i{background:var(--ok);box-shadow:0 0 0 3px rgba(125,192,138,.13)}
+.chip.err{color:#e0ab9b;border-color:#4a2f28}
+.chip.err i{background:var(--warn);box-shadow:0 0 0 3px rgba(208,121,95,.14)}
+.chip.busy i{background:var(--brass)}
+
+/* ===== 主体布局 ===== */
+.layout{
+  padding:16px 14px 46px;
+  display:grid;gap:16px;grid-template-columns:minmax(0,1fr);
+  align-items:start;
+}
+.board-wrap{width:100%;max-width:880px;margin-inline:auto;min-width:0;position:relative}
+.arena{
+  padding:8px;border-radius:20px;
+  background:linear-gradient(158deg,#2b2016 0%,#181208 70%,#120d07 100%);
+  border:1px solid #3a2d1e;
+  box-shadow:0 34px 70px -44px #000,inset 0 1px 0 rgba(255,255,255,.08);
+}
+canvas#board{
+  display:block;width:100%;height:auto;aspect-ratio:1/1;
+  border-radius:13px;touch-action:manipulation;cursor:crosshair;
+}
+.turnbar{
+  margin-top:11px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);
+  font-size:14px;
+}
+.turnbar .t{display:flex;align-items:center;gap:9px;min-width:0}
+.turnbar .t span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.turnbar #moveCount{font-size:12px;color:var(--dim);flex:0 0 auto}
+.dot{
+  width:16px;height:16px;border-radius:50%;flex:0 0 auto;
+  border:1px solid rgba(255,255,255,.16);
+}
+.dot.b{background:radial-gradient(circle at 32% 28%,#5d656d,#11161a 72%)}
+.dot.w{background:radial-gradient(circle at 32% 28%,#fffefb,#ded7c7 72%);border-color:rgba(0,0,0,.28)}
+.dot.none{background:#25302c;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+
+/* ===== 侧栏卡片 ===== */
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:14px;
+}
+.card-h{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin:0 0 12px;
+}
+.card-h b{font-size:13px;font-weight:600;letter-spacing:.06em;color:#cfd6cb}
+.card-h span{font-size:11px;color:var(--dim)}
+
+/* 大厅 */
+.field{margin-bottom:11px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+input[type=text]{
+  width:100%;height:44px;padding:0 12px;
+  border-radius:10px;border:1px solid var(--line);background:#0d1413;
+  color:var(--paper);font-size:16px;outline:none;transition:border-color .15s,box-shadow .15s;
+}
+input[type=text]:focus{border-color:var(--brass-dim);box-shadow:0 0 0 3px rgba(201,163,91,.11)}
+input[type=text]::placeholder{color:#4f5a54}
+.hint{font-size:12px;color:var(--dim);line-height:1.7;margin:11px 0 0}
+.hint b{color:var(--muted);font-weight:500}
+
+/* 按钮 */
+.btn{
+  height:44px;padding:0 14px;border-radius:10px;
+  border:1px solid var(--line);background:var(--panel-hi);color:var(--paper);
+  font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  cursor:pointer;transition:background .15s,border-color .15s,transform .1s;
+}
+.btn:hover{background:#212d29;border-color:#33423d}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:linear-gradient(180deg,#d3ae6a,#bf9a52);border-color:#e0c188;color:#1c1406;font-weight:600}
+.btn.primary:hover{background:linear-gradient(180deg,#dcb878,#cba458)}
+.btn.primary:disabled{opacity:.45}
+.btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.btn.block{width:100%}
+.btn.sm{height:38px;font-size:13px;padding:0 12px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:11px}
+
+/* 房间条 */
+.roomline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}
+.roomline .k{font-size:11px;color:var(--dim);letter-spacing:.1em;margin-right:7px}
+.roomline strong{
+  font-family:var(--serif);font-size:19px;letter-spacing:.12em;color:var(--brass-soft);
+}
+.ghost{
+  background:none;border:1px solid var(--line);border-radius:9px;height:34px;padding:0 10px;
+  color:var(--muted);font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  transition:color .15s,border-color .15s;
+}
+.ghost:hover{color:var(--paper);border-color:#3a4b45}
+.ghost svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}
+
+/* 座位 */
+.seat{
+  display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;
+  background:var(--panel-hi);border:1px solid transparent;margin-bottom:8px;
+}
+.seat:last-child{margin-bottom:0}
+.seat.me{border-color:#3c3218;background:#1b1a10}
+.seat .who{flex:1;min-width:0}
+.seat .who strong{
+  display:block;font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.seat .who small{display:block;font-size:11px;color:var(--dim);margin-top:1px}
+.seat .tag{
+  font-size:10px;letter-spacing:.06em;color:var(--brass);
+  border:1px solid #4a3a1c;border-radius:5px;padding:1px 5px;flex:0 0 auto;
+}
+.seat .tag.w{color:#a9c2b2;border-color:#2c4436}
+.seat .live{width:7px;height:7px;border-radius:50%;background:#33413b;flex:0 0 auto}
+.seat .live.on{background:var(--ok)}
+.seat .live.off{background:var(--warn)}
+.seat.empty .who strong{color:var(--dim);font-weight:400}
+
+/* 元信息 */
+.meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px;font-size:12px;color:var(--muted)}
+.meta span:first-child{color:#b6c0b4}
+
+/* 请求条 */
+.prompt{
+  margin-top:11px;padding:11px 12px;border-radius:11px;
+  border:1px solid #453818;background:#1a1810;
+}
+.prompt p{margin:0 0 9px;font-size:13px;color:#e3d3ad}
+.prompt .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* 聊天 */
+.chat-card{display:flex;flex-direction:column}
+.chat-log{
+  height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;
+  padding:2px 4px 2px 0;scrollbar-width:thin;
+}
+.chat-log::-webkit-scrollbar{width:6px}
+.chat-log::-webkit-scrollbar-thumb{background:#2b3a34;border-radius:3px}
+.msg{
+  max-width:86%;font-size:13px;line-height:1.5;padding:7px 10px;border-radius:11px;
+  background:#1d2823;word-break:break-word;align-self:flex-start;
+}
+.msg .nm{display:block;font-size:10px;color:var(--dim);margin-bottom:2px}
+.msg.mine{align-self:flex-end;background:#2b2416;border:1px solid #3d3420;color:#f0e2c6}
+.msg.mine .nm{text-align:right}
+.msg.sys{
+  align-self:center;background:none;color:var(--dim);font-size:11px;
+  padding:0;max-width:100%;text-align:center;letter-spacing:.02em;
+}
+.chat-in{display:flex;gap:8px;margin-top:10px}
+.chat-in input{height:42px;font-size:16px}
+.chat-in .send{
+  width:44px;height:42px;padding:0;flex:0 0 auto;border-radius:10px;
+  background:var(--panel-hi);border:1px solid var(--line);color:var(--brass);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.chat-in .send:hover{background:#212d29}
+.chat-in .send svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linejoin:round}
+.linkbtn{
+  display:block;width:100%;margin-top:12px;padding:8px 0;background:none;border:none;
+  color:var(--dim);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+}
+.linkbtn:hover{color:var(--muted)}
+
+/* toast */
+.toast{
+  position:absolute;left:50%;bottom:76px;transform:translate(-50%,10px);
+  max-width:min(92%,420px);padding:9px 14px;border-radius:9px;
+  background:rgba(10,16,14,.94);border:1px solid #3a4a43;color:#dfe5da;
+  font-size:13px;text-align:center;opacity:0;pointer-events:none;
+  transition:opacity .22s,transform .22s;z-index:30;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* overlay */
+.overlay{
+  position:fixed;inset:0;background:rgba(5,9,8,.78);backdrop-filter:blur(3px);
+  display:flex;align-items:center;justify-content:center;padding:22px;z-index:60;
+}
+.modal{
+  width:100%;max-width:390px;background:var(--panel);border:1px solid #33423b;
+  border-radius:16px;padding:22px;box-shadow:0 30px 60px -30px #000;
+}
+.modal h2{margin:0 0 8px;font-family:var(--serif);font-size:19px;letter-spacing:.06em;font-weight:600}
+.modal p{margin:0 0 18px;font-size:13px;color:var(--muted);line-height:1.75}
+
+@media (min-width:900px){
+  .layout{
+    grid-template-columns:minmax(0,1fr) 356px;
+    gap:26px;padding:26px 26px 56px;max-width:1340px;margin-inline:auto;
+  }
+  .brand h1{font-size:22px}
+  .brand p{font-size:12px}
+  .chat-log{height:230px}
+  .turnbar{font-size:15px}
+  .arena{padding:10px;border-radius:24px}
+}
+@media (min-width:1280px){
+  .layout{grid-template-columns:minmax(0,1fr) 380px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 28 28" aria-hidden="true">
+      <rect x="1" y="1" width="26" height="26" rx="7" fill="none" stroke="#c9a35b" stroke-width="1.3"/>
+      <g stroke="rgba(201,163,91,.4)" stroke-width="1">
+        <path d="M9 3.5v21M19 3.5v21M3.5 9h21M3.5 19h21"/>
+      </g>
+      <circle cx="10" cy="10" r="4.4" fill="#11150f" stroke="#c9a35b" stroke-width="1"/>
+      <circle cx="18.4" cy="18.2" r="3.2" fill="#f1ece0"/>
+    </svg>
+    <div>
+      <h1>棋室</h1>
+      <p>五子棋 · 十五路 · 双人联机</p>
+    </div>
+  </div>
+  <button class="chip busy" id="connChip" type="button" title="点击重试连接">
+    <i></i><span id="connText">连接中</span>
+  </button>
+</header>
+
+<main class="layout">
+  <section class="board-wrap">
+    <div class="arena">
+      <canvas id="board" width="640" height="640" aria-label="十五路五子棋棋盘"></canvas>
+    </div>
+    <div class="turnbar">
+      <div class="t">
+        <div class="dot none" id="turnDot"></div>
+        <span id="turnText">未进入房间</span>
+      </div>
+      <span id="moveCount">第 0 手</span>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </section>
+
+  <aside class="side">
+    <!-- 大厅 -->
+    <div class="card" id="panelLobby">
+      <div class="card-h"><b>进入棋室</b><span>两人一间</span></div>
+      <div class="field">
+        <label for="nameInput">你的名字</label>
+        <input type="text" id="nameInput" maxlength="12" placeholder="给自己起个名字" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="roomInput">房间号</label>
+        <input type="text" id="roomInput" maxlength="12" placeholder="例如 8821" autocomplete="off" spellcheck="false">
+      </div>
+      <button class="btn primary block" id="joinBtn" type="button">
+        <svg viewBox="0 0 24 24"><path d="M4 12h9"/><path d="M13 7l5 5-5 5"/><path d="M18 4h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-1"/></svg>
+        进入棋室
+      </button>
+      <p class="hint">
+        两位棋手输入<b>同一个房间号</b>即可对弈，先到者执黑先行。<br>
+        进入后可复制邀请链接发给对手，对方点开自动入场。
+      </p>
+    </div>
+
+    <!-- 对局面板 -->
+    <div class="card" id="panelGame" hidden>
+      <div class="roomline">
+        <div><span class="k">房间</span><strong id="roomLabel">—</strong></div>
+        <button class="ghost" id="copyBtn" type="button">
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15 5.5H6.5A2 2 0 0 0 4.5 7.5V16"/></svg>
+          复制邀请
+        </button>
+      </div>
+
+      <div class="seat empty" id="seatB">
+        <div class="dot b"></div>
+        <div class="who"><strong id="bName">等待棋手入座</strong><small id="bMeta">执黑 · 先行</small></div>
+        <span class="live" id="bLive"></span>
+      </div>
+      <div class="seat empty" id="seatW">
+        <div class="dot w"></div>
+        <div class="who"><strong id="wName">等待棋手入座</strong><small id="wMeta">执白 · 后行</small></div>
+        <span class="live" id="wLive"></span>
+      </div>
+
+      <div class="meta">
+        <span id="statusText">正在进入…</span>
+        <span id="seatInfo">0 / 2 在场</span>
+      </div>
+
+      <div class="prompt" id="promptBar" hidden>
+        <p id="promptText"></p>
+        <div class="row">
+          <button class="btn sm primary" id="promptYes" type="button">同意</button>
+          <button class="btn sm" id="promptNo" type="button">拒绝</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <button class="btn" id="undoBtn" type="button" disabled>
+          <svg viewBox="0 0 24 24"><path d="M9.5 14.5 5 10l4.5-4.5"/><path d="M5 10h8.5a5.5 5.5 0 0 1 0 11H9"/></svg>
+          悔棋
+        </button>
+        <button class="btn" id="restartBtn" type="button" disabled>
+          <svg viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.4-5.5"/><path d="M20 4.5v4.6h-4.6"/></svg>
+          重新开局
+        </button>
+      </div>
+      <button class="linkbtn" id="leaveBtn" type="button">离开房间</button>
+    </div>
+
+    <!-- 聊天 -->
+    <div class="card chat-card" id="chatCard" hidden>
+      <div class="card-h"><b>对局聊天</b><span>仅房间内可见</span></div>
+      <div class="chat-log" id="chatLog" aria-live="polite"></div>
+      <div class="chat-in">
+        <input type="text" id="chatInput" maxlength="120" placeholder="说点什么…" autocomplete="off">
+        <button class="send" id="chatSend" type="button" aria-label="发送">
+          <svg viewBox="0 0 24 24"><path d="M20.5 3.5 3.5 10.6l6.4 2.5 2.5 6.4Z"/><path d="M20.5 3.5 10 13"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
+    <h2 id="overlayTitle">房间已满</h2>
+    <p id="overlayText"></p>
+    <button class="btn primary block" id="overlayBtn" type="button">换个房间号</button>
+  </div>
+</div>
+
+<!-- ===== 脚本占位 ===== -->
+<script>
+(function () {
+  'use strict';
+
+  /* ================= 常量 ================= */
+  var APPKEY = 'BC-cc8dd8d6d5604561a605b69023b06dc5';
+  var HOST = 'hangzhou.goeasy.io';          // 杭州区域（已核验该 appkey 在此区域有效）
+  var N = 15, TOTAL = N * N;
+  var BLACK = 1, WHITE = 2;
+  var TAU = Math.PI * 2;
+  var PEER_TIMEOUT = 20000;                 // 20 秒没有心跳视为掉线
+  var PEER_FORGET = 90000;                  // 90 秒后彻底清出席位
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var canvas = $('board'), ctx = canvas.getContext('2d');
+  var el = {
+    connChip: $('connChip'), connText: $('connText'),
+    panelLobby: $('panelLobby'), panelGame: $('panelGame'), chatCard: $('chatCard'),
+    nameInput: $('nameInput'), roomInput: $('roomInput'), joinBtn: $('joinBtn'),
+    roomLabel: $('roomLabel'), copyBtn: $('copyBtn'),
+    seatB: $('seatB'), seatW: $('seatW'),
+    bName: $('bName'), bMeta: $('bMeta'), bLive: $('bLive'),
+    wName: $('wName'), wMeta: $('wMeta'), wLive: $('wLive'),
+    statusText: $('statusText'), seatInfo: $('seatInfo'), moveCount: $('moveCount'),
+    promptBar: $('promptBar'), promptText: $('promptText'),
+    promptYes: $('promptYes'), promptNo: $('promptNo'),
+    undoBtn: $('undoBtn'), restartBtn: $('restartBtn'), leaveBtn: $('leaveBtn'),
+    chatLog: $('chatLog'), chatInput: $('chatInput'), chatSend: $('chatSend'),
+    toast: $('toast'), overlay: $('overlay'),
+    overlayTitle: $('overlayTitle'), overlayText: $('overlayText'), overlayBtn: $('overlayBtn'),
+    turnDot: $('turnDot'), turnText: $('turnText')
+  };
+
+  /* ================= 状态 ================= */
+  var S = {
+    uid: getUid(),
+    name: '',
+    room: '',
+    channel: '',
+    color: 0,              // 0 未入座 / 1 黑 / 2 白
+    settled: false,
+    moves: [],
+    turn: BLACK,
+    win: null,
+    phase: 'idle',         // idle | waiting | playing | over
+    peers: new Map(),
+    pending: null,         // 收到的请求 { kind, uid, name }
+    sent: null,            // 我发出的请求 { kind, at }
+    connected: false,
+    subscribed: false,
+    pendingRoom: '',
+    chat: [],
+    hover: -1,
+    settleTimer: null
+  };
+
+  var board = new Uint8Array(TOTAL);
+  var ge = null;
+  var LAYER = null;
+  var G = { size: 0, pad: 0, cell: 0, dpr: 1 };
+
+  function getUid() {
+    var k = 'gmk_uid', v = null;
+    try { v = localStorage.getItem(k); } catch (e) {}
+    if (!v) {
+      v = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      try { localStorage.setItem(k, v); } catch (e) {}
+    }
+    return v;
+  }
+
+  function save(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+
+  /* ================= 棋盘数据 ================= */
+  function findLine(r, c, color) {
+    var dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    for (var d = 0; d < dirs.length; d++) {
+      var dr = dirs[d][0], dc = dirs[d][1], neg = [], pos = [], k, nr, nc;
+      for (k = 1; k < 5; k++) {
+        nr = r - dr * k; nc = c - dc * k;
+        if (nr < 0 || nr >= N || nc < 0 || nc >= N || board[nr * N + nc] !== color) break;
+        neg.push(nr * N + nc);
+      }
+      for (k = 1; k < 5; k++) {
+        nr = r + dr * k; nc = c + dc * k;
+        if (nr < 0 || nr >= N || nc < 0 || nc >= N || board[nr * N + nc] !== color) break;
+        pos.push(nr * N + nc);
+      }
+      if (neg.length + 1 + pos.length >= 5) {
+        return neg.reverse().concat([r * N + c], pos);
+      }
+    }
+    return null;
+  }
+
+  function refreshPhase() {
+    if (!S.channel) { S.phase = 'idle'; return; }
+    if (S.win || S.moves.length >= TOTAL) { S.phase = 'over'; return; }
+    S.phase = opponent() ? 'playing' : 'waiting';
+  }
+
+  function rebuild(silent) {
+    var i, idx;
+    board.fill(0);
+    for (i = 0; i < S.moves.length; i++) {
+      idx = S.moves[i];
+      if (idx >= 0 && idx < TOTAL) board[idx] = (i % 2 === 0) ? BLACK : WHITE;
+    }
+    S.turn = (S.moves.length % 2 === 0) ? BLACK : WHITE;
+    var hadWin = !!S.win;
+    S.win = null;
+    if (S.moves.length) {
+      var last = S.moves[S.moves.length - 1];
+      var side = board[last];
+      var line = findLine(Math.floor(last / N), last % N, side);
+      if (line) S.win = { line: line, color: side };
+    }
+    refreshPhase();
+    if (!silent && S.win && !hadWin) {
+      sysMsg((S.win.color === BLACK ? '黑棋' : '白棋') + '五子连珠，本局结束');
+    }
+  }
+
+  function applyMove(idx) {
+    if (typeof idx !== 'number' || idx < 0 || idx >= TOTAL) return false;
+    if (board[idx] || S.win) return false;
+    var side = (S.moves.length % 2 === 0) ? BLACK : WHITE;
+    S.moves.push(idx);
+    board[idx] = side;
+    S.turn = (S.moves.length % 2 === 0) ? BLACK : WHITE;
+    var line = findLine(Math.floor(idx / N), idx % N, side);
+    if (line) {
+      S.win = { line: line, color: side };
+      sysMsg((side === BLACK ? '黑棋' : '白棋') + '五子连珠，本局结束');
+    }
+    refreshPhase();
+    draw();
+    syncUI();
+    return true;
+  }
+
+  function applyState(moves) {
+    if (!Array.isArray(moves)) return;
+    var used = {}, clean = [];
+    for (var i = 0; i < moves.length; i++) {
+      var v = moves[i];
+      if (typeof v !== 'number' || v < 0 || v >= TOTAL || used[v]) continue;
+      used[v] = 1; clean.push(v);
+    }
+    S.moves = clean;
+    rebuild(true);
+    draw();
+    syncUI();
+  }
+
+  /* ================= 席位 ================= */
+  function opponent() {
+    var best = null;
+    S.peers.forEach(function (p) {
+      if (!best || p.last > best.last) best = p;
+    });
+    return best;
+  }
+
+  function oppAlive() {
+    var o = opponent();
+    return !!o && (Date.now() - o.last) < PEER_TIMEOUT;
+  }
+
+  function canPlace() {
+    return !!(S.channel && S.settled && S.color && !S.win &&
+      S.turn === S.color && opponent() && S.phase !== 'over');
+  }
+
+  /* ================= 联机 ================= */
+  function initGeo() {
+    if (typeof GoEasy === 'undefined') {
+      setChip('err', '通信库未加载');
+      return;
+    }
+    try {
+      ge = GoEasy.getInstance({ host: HOST, appkey: APPKEY, modules: ['pubsub'] });
+    } catch (e) {
+      setChip('err', '初始化失败');
+      return;
+    }
+    setChip('busy', '连接中');
+    ge.connect({
+      onSuccess: function () {
+        S.connected = true;
+        setChip('on', '已连接');
+        if (S.pendingRoom) {
+          var r = S.pendingRoom; S.pendingRoom = '';
+          joinRoom(r);
+        } else if (S.channel && !S.subscribed) {
+          subscribe();
+        }
+      },
+      onFailed: function (err) {
+        S.connected = false;
+        setChip('err', '连接失败 · 点击重试');
+        toast('连接服务器失败' + (err && err.code ? '（' + err.code + '）' : '') + '，可点右上角重试');
+      },
+      onProgress: function (n) {
+        setChip('busy', '连接中' + (n ? ' ' + n : '') + '…');
+      }
+    });
+  }
+
+  function retryConnect() {
+    if (!ge) { initGeo(); return; }
+    setChip('busy', '重连中…');
+    try {
+      ge.connect({
+        onSuccess: function () {
+          S.connected = true;
+          setChip('on', '已连接');
+          if (S.channel) subscribe();
+        },
+        onFailed: function () {
+          S.connected = false;
+          setChip('err', '连接失败 · 点击重试');
+        },
+        onProgress: function () { setChip('busy', '重连中…'); }
+      });
+    } catch (e) {
+      initGeo();
+    }
+  }
+
+  function subscribe() {
+    if (!ge || !S.channel) return;
+    setChip('busy', '进入房间…');
+    ge.pubsub.subscribe({
+      channel: S.channel,
+      onMessage: function (m) {
+        try { handle(JSON.parse(m.content)); } catch (e) {}
+      },
+      onSuccess: function () {
+        S.subscribed = true;
+        setChip('on', '已连接');
+        send({ type: 'hello', name: S.name, color: S.color });
+        if (!S.settled) {
+          clearTimeout(S.settleTimer);
+          S.settleTimer = setTimeout(settleSeats, 1500);
+        } else {
+          send({ type: 'state-req' });
+        }
+        syncUI();
+      },
+      onFailed: function () {
+        S.subscribed = false;
+        setChip('err', '进入失败 · 点击重试');
+        toast('加入房间失败，请检查网络后重试');
+      }
+    });
+  }
+
+  function unsubscribe() {
+    if (ge && S.channel && S.subscribed) {
+      try { ge.pubsub.unsubscribe({ channel: S.channel }); } catch (e) {}
+    }
+    S.subscribed = false;
+  }
+
+  function send(obj) {
+    if (!ge || !S.channel) return;
+    if (!obj.uid) obj.uid = S.uid;
+    try {
+      ge.pubsub.publish({
+        channel: S.channel,
+        message: JSON.stringify(obj),
+        onFailed: function () {}
+      });
+    } catch (e) {}
+  }
+
+  function settleSeats() {
+    if (S.settled || !S.channel) return;
+    var others = [];
+    S.peers.forEach(function (p) {
+      if ((Date.now() - p.last) < PEER_TIMEOUT) others.push(p);
+    });
+    S.settled = true;
+
+    if (others.length >= 2) { roomFull(); return; }
+
+    if (others.length === 0) {
+      S.color = BLACK;
+    } else {
+      var p = others[0];
+      if (p.color === BLACK) S.color = WHITE;
+      else if (p.color === WHITE) S.color = BLACK;
+      else S.color = (S.uid < p.uid) ? BLACK : WHITE;   // 双方都还没定色时按 uid 公平裁决
+    }
+
+    send({ type: 'color', color: S.color });
+    send({ type: 'state-req' });
+    reloadBoard();
+    syncUI();
+
+    if (others.length === 0) {
+      sysMsg('你进入了房间 ' + S.room + '，等待对手…');
+    } else {
+      sysMsg('你进入了房间 ' + S.room + '，执' + (S.color === BLACK ? '黑' : '白'));
+    }
+  }
+
+  function reloadBoard() {
+    rebuild(true);
+    draw();
+    syncUI();
+  }
+
+  function roomFull() {
+    unsubscribe();
+    S.channel = ''; S.settled = false; S.color = 0;
+    S.moves = []; S.win = null; S.peers.clear();
+    S.pending = null; S.sent = null; S.chat = [];
+    rebuild(true); draw(); renderChat();
+    showOverlay('房间已满', '这个房间已经坐满两位棋手。换一个房间号，或等其中一位离开后再进来。');
+    backToLobby(true);
+    syncUI();
+  }
+
+  /* ================= 消息处理 ================= */
+  function handle(m) {
+    if (!m || typeof m.type !== 'string') return;
+    if (m.uid === S.uid) return;             // 自己的消息本地已处理
+
+    var now = Date.now();
+    var p = S.peers.get(m.uid);
+    if (p) {
+      p.last = now;
+      if (m.name) p.name = m.name;
+      if (typeof m.color === 'number' && m.color) p.color = m.color;
+    } else if (m.uid) {
+      p = { uid: m.uid, name: m.name || '对手', color: typeof m.color === 'number' ? m.color : 0, last: now };
+      S.peers.set(m.uid, p);
+      if (S.settled && S.color) sysMsg((p.name || '对手') + ' 进入了房间');
+    }
+
+    switch (m.type) {
+      case 'hello':
+        send({ type: 'here', name: S.name, color: S.color });
+        break;
+
+      case 'here':
+        break;
+
+      case 'ping':
+      case 'pong':
+        break;
+
+      case 'color':
+        if (S.settled && S.color === BLACK && p && p.color === BLACK && S.uid > m.uid) {
+          S.color = WHITE;
+          send({ type: 'color', color: WHITE });
+          draw();
+        }
+        break;
+
+      case 'bye':
+        S.peers.delete(m.uid);
+        sysMsg((m.name || '对手') + ' 离开了房间');
+        break;
+
+      case 'move':
+        if (typeof m.seq === 'number' && m.seq !== S.moves.length) {
+          send({ type: 'state-req' });
+          break;
+        }
+        if (!applyMove(m.idx)) send({ type: 'state-req' });
+        break;
+
+      case 'state':
+        applyState(m.moves);
+        break;
+
+      case 'state-req':
+        send({ type: 'state', moves: S.moves });
+        break;
+
+      case 'undo-req':
+        if (!S.settled || S.pending) { send({ type: 'undo-no' }); break; }
+        S.pending = { kind: 'undo', uid: m.uid, name: m.name || '对手' };
+        break;
+
+      case 'undo-no':
+        S.sent = null;
+        toast('对手拒绝了悔棋');
+        sysMsg('悔棋请求被拒绝');
+        break;
+
+      case 'undo-ok':
+        S.sent = null;
+        sysMsg('对手同意悔棋');
+        break;
+
+      case 'restart-req':
+        if (!S.settled || S.pending) { send({ type: 'restart-no' }); break; }
+        S.pending = { kind: 'restart', uid: m.uid, name: m.name || '对手' };
+        break;
+
+      case 'restart-no':
+        S.sent = null;
+        toast('对手拒绝了重新开局');
+        sysMsg('重开请求被拒绝');
+        break;
+
+      case 'restart-ok':
+        S.sent = null;
+        sysMsg('对手同意重新开局');
+        break;
+
+      case 'chat':
+        pushChat('opp', m.name || '对手', m.text);
+        break;
+
+      default:
+        break;
+    }
+
+    syncUI();
+  }
+
+  /* ================= 对局动作 ================= */
+  function play(idx) {
+    if (!S.channel || !S.settled) { toast('还没进入棋室'); return; }
+    if (!S.color) { toast('房间已满，无法落子'); return; }
+    if (S.win) { toast('本局已结束，可以重新开局'); return; }
+    if (!opponent()) { toast('还没有对手，把邀请链接发给朋友'); return; }
+    if (S.turn !== S.color) { toast('还没轮到你'); return; }
+    if (board[idx]) { toast('这里已经有棋子了'); return; }
+    if (!applyMove(idx)) return;
+    send({ type: 'move', idx: idx, seq: S.moves.length - 1 });
+  }
+
+  function canUndoAsk() {
+    return !!(S.settled && S.color && S.moves.length && oppAlive() &&
+      !S.sent && !S.pending && !S.win);
+  }
+
+  function askUndo() {
+    if (!canUndoAsk()) return;
+    S.sent = { kind: 'undo', at: Date.now() };
+    send({ type: 'undo-req', name: S.name });
+    toast('已向对手发出悔棋请求');
+    syncUI();
+  }
+
+  function askRestart() {
+    if (!S.settled) return;
+    if (S.pending || S.sent) { toast('还有请求在处理，稍等一下'); return; }
+    if (!oppAlive()) { localRestart(); return; }
+    S.sent = { kind: 'restart', at: Date.now() };
+    send({ type: 'restart-req', name: S.name });
+    toast('已向对手发出重新开局请求');
+    syncUI();
+  }
+
+  function localRestart() {
+    S.moves = []; S.win = null; S.sent = null; S.pending = null;
+    rebuild(true); draw(); syncUI();
+    sysMsg('新的一局开始');
+  }
+
+  function replyPrompt(agree) {
+    var p = S.pending;
+    if (!p) return;
+    S.pending = null;
+    el.promptBar.hidden = true;
+
+    if (!agree) {
+      send({ type: p.kind === 'undo' ? 'undo-no' : 'restart-no' });
+      sysMsg('你拒绝了' + (p.kind === 'undo' ? '悔棋' : '重新开局') + '请求');
+      syncUI();
+      return;
+    }
+
+    if (p.kind === 'undo') {
+      var topColor = S.moves.length ? board[S.moves[S.moves.length - 1]] : 0;
+      var reqColor = (S.peers.get(p.uid) || {}).color || 0;
+      // 若最后一手属于对手，则连自己那一手一起退回，保证轮次回到请求方
+      var popCount = (reqColor && topColor === reqColor) ? 1 : (reqColor ? 2 : 1);
+      S.moves.splice(Math.max(0, S.moves.length - popCount));
+      rebuild(true);
+      draw();
+      send({ type: 'undo-ok' });
+      send({ type: 'state', moves: S.moves });
+      sysMsg('已同意悔棋，退回 ' + popCount + ' 手');
+    } else {
+      S.moves = []; S.win = null;
+      rebuild(true);
+      draw();
+      send({ type: 'restart-ok' });
+      send({ type: 'state', moves: [] });
+      sysMsg('已同意重新开局');
+    }
+    syncUI();
+  }
+
+  function leaveRoom() {
+    if (S.channel) send({ type: 'bye', name: S.name });
+    unsubscribe();
+    S.channel = ''; S.room = ''; S.color = 0; S.settled = false;
+    S.moves = []; S.win = null; S.peers.clear();
+    S.pending = null; S.sent = null; S.chat = []; S.hover = -1;
+    rebuild(true); draw(); renderChat();
+    el.promptBar.hidden = true;
+    hideOverlay();
+    backToLobby(false);
+    syncUI();
+  }
+
+  function joinRoom(raw) {
+    var room = normalizeRoom(raw);
+    if (!room) { toast('请输入房间号'); return; }
+
+    if (!S.connected) {
+      S.pendingRoom = room;
+      toast('正在连接服务器，连上后自动进入…');
+      if (!ge) initGeo(); else retryConnect();
+      return;
+    }
+
+    if (S.channel) { unsubscribe(); }
+
+    S.room = room;
+    S.channel = 'gmk_' + room;
+    S.settled = false;
+    S.color = 0;
+    S.moves = []; S.win = null;
+    S.peers.clear();
+    S.pending = null; S.sent = null;
+    S.chat = [];
+    S.hover = -1;
+    renderChat();
+    reloadBoard();
+    subscribe();
+  }
+
+  function normalizeRoom(raw) {
+    raw = (raw || '').trim();
+    if (!raw) return '';
+    var safe = raw.replace(/[^0-9a-zA-Z_\-]/g, '');
+    if (safe) return safe.slice(0, 12).toLowerCase();
+    var h = 0;
+    for (var i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) >>> 0;
+    return 'z' + h.toString(36).slice(0, 8);
+  }
+
+  function backToLobby(keepRoom) {
+    el.panelLobby.hidden = false;
+    el.panelGame.hidden = true;
+    el.chatCard.hidden = true;
+    el.promptBar.hidden = true;
+    if (!keepRoom) el.roomInput.value = el.roomInput.value || '';
+  }
+
+  /* ================= 聊天 ================= */
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  function pushChat(kind, name, text) {
+    if (!text) return;
+    S.chat.push({ kind: kind, name: name, text: String(text).slice(0, 160) });
+    if (S.chat.length > 120) S.chat.shift();
+    renderChat();
+  }
+
+  function sysMsg(text) { pushChat('sys', '', text); }
+
+  function renderChat() {
+    var html = '';
+    for (var i = 0; i < S.chat.length; i++) {
+      var c = S.chat[i];
+      if (c.kind === 'sys') {
+        html += '<div class="msg sys">' + esc(c.text) + '</div>';
+      } else {
+        html += '<div class="msg' + (c.kind === 'me' ? ' mine' : '') + '">' +
+          '<span class="nm">' + esc(c.name || '') + '</span>' + esc(c.text) + '</div>';
+      }
+    }
+    el.chatLog.innerHTML = html;
+    el.chatLog.scrollTop = el.chatLog.scrollHeight;
+  }
+
+  function sendChat() {
+    var v = (el.chatInput.value || '').trim();
+    if (!v) return;
+    if (!S.channel || !S.subscribed) { toast('还没有连上房间'); return; }
+    v = v.slice(0, 120);
+    el.chatInput.value = '';
+    pushChat('me', S.name, v);
+    send({ type: 'chat', name: S.name, text: v });
+  }
+
+  /* ================= 界面同步 ================= */
+  function setChip(state, text) {
+    el.connChip.className = 'chip' + (state ? ' ' + state : '');
+    el.connText.textContent = text;
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    el.toast.textContent = msg;
+    el.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.toast.classList.remove('show'); }, 2600);
+  }
+
+  function showOverlay(title, text) {
+    el.overlayTitle.textContent = title;
+    el.overlayText.textContent = text;
+    el.overlay.hidden = false;
+  }
+  function hideOverlay() { el.overlay.hidden = true; }
+  el.overlayBtn.addEventListener('click', function () {
+    hideOverlay();
+    el.roomInput.focus();
+    el.roomInput.select();
+  });
+
+  function fillSeat(color, seat, nameEl, metaEl, liveEl, oppOnline) {
+    var isMe = (S.color === color);
+    var peer = null;
+    if (!isMe) {
+      var o = opponent();
+      if (o && o.color === color) peer = o;
+    }
+    var desc = (color === BLACK ? '执黑 · 先行' : '执白 · 后行');
+
+    if (isMe) {
+      seat.className = 'seat me';
+      nameEl.textContent = S.name || '我';
+      metaEl.textContent = desc + ' · 你';
+      liveEl.className = 'live on';
+    } else if (peer) {
+      seat.className = 'seat';
+      nameEl.textContent = peer.name || '对手';
+      metaEl.textContent = desc + ' · 对手';
+      liveEl.className = 'live ' + (oppOnline ? 'on' : 'off');
+    } else {
+      seat.className = 'seat empty';
+      nameEl.textContent = '等待棋手入座';
+      metaEl.textContent = desc;
+      liveEl.className = 'live';
+    }
+  }
+
+  function syncUI() {
+    if (!S.channel) {
+      el.panelLobby.hidden = false;
+      el.panelGame.hidden = true;
+      el.chatCard.hidden = true;
+      el.promptBar.hidden = true;
+      el.turnText.textContent = '未进入房间';
+      el.turnDot.className = 'dot none';
+      el.moveCount.textContent = '第 0 手';
+      return;
+    }
+
+    el.panelLobby.hidden = true;
+    el.panelGame.hidden = false;
+    el.chatCard.hidden = false;
+    el.roomLabel.textContent = S.room;
+
+    refreshPhase();
+
+    var o = opponent();
+    var oppOnline = !!o && (Date.now() - o.last) < PEER_TIMEOUT;
+
+    fillSeat(BLACK, el.seatB, el.bName, el.bMeta, el.bLive, oppOnline);
+    fillSeat(WHITE, el.seatW, el.wName, el.wMeta, el.wLive, oppOnline);
+
+    var seated = (S.color ? 1 : 0) + (o ? 1 : 0);
+    el.seatInfo.textContent = seated + ' / 2 在场';
+
+    // 状态文案
+    var status;
+    if (!S.settled) status = '正在入场…';
+    else if (!S.color) status = '房间已满';
+    else if (S.win) status = (S.win.color === BLACK ? '黑棋' : '白棋') + '胜';
+    else if (!o) status = '等待对手加入';
+    else if (!oppOnline) status = '对手掉线，等待重连…';
+    else if (S.pending) status = '有请求待处理';
+    else if (S.sent) status = S.sent.kind === 'undo' ? '已发出悔棋请求…' : '已发出重开请求…';
+    else if (S.turn === S.color) status = '轮到你了';
+    else status = '等待对手落子';
+    el.statusText.textContent = status;
+
+    // 轮次条
+    if (S.win) {
+      el.turnDot.className = 'dot ' + (S.win.color === BLACK ? 'b' : 'w');
+      el.turnText.textContent = (S.win.color === BLACK ? '黑棋' : '白棋') + '五子连珠 · 本局结束';
+    } else if (!S.settled) {
+      el.turnDot.className = 'dot none';
+      el.turnText.textContent = '正在入场…';
+    } else {
+      el.turnDot.className = 'dot ' + (S.turn === BLACK ? 'b' : 'w');
+      if (!o) el.turnText.textContent = '等待对手加入，把邀请链接发给朋友';
+      else if (S.turn === S.color) el.turnText.textContent = '轮到你落子（' + (S.color === BLACK ? '黑' : '白') + '）';
+      else el.turnText.textContent = '等对手落子（' + (S.turn === BLACK ? '黑' : '白') + '）';
+    }
+    el.moveCount.textContent = '第 ' + S.moves.length + ' 手';
+
+    // 请求条
+    if (S.pending) {
+      el.promptBar.hidden = false;
+      el.promptText.textContent = (S.pending.name || '对手') + ' 请求' +
+        (S.pending.kind === 'undo' ? '悔棋' : '重新开局') + '，是否同意？';
+      el.promptYes.textContent = '同意';
+      el.promptNo.textContent = '拒绝';
+    } else {
+      el.promptBar.hidden = true;
+    }
+
+    el.undoBtn.disabled = !canUndoAsk();
+    el.restartBtn.disabled = !S.settled || !!S.pending || !!S.sent;
+  }
+
+  /* ================= 棋盘绘制 ================= */
+  function pt(idx) {
+    return { x: G.pad + (idx % N) * G.cell, y: G.pad + Math.floor(idx / N) * G.cell };
+  }
+
+  function measure() {
+    var css = Math.floor(canvas.clientWidth || 0);
+    if (css < 60) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    var px = Math.round(css * dpr);
+    if (canvas.width === px && LAYER) return;
+    canvas.width = px;
+    canvas.height = px;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    G.size = css;
+    G.dpr = dpr;
+    G.pad = Math.max(14, Math.round(css * 0.072));
+    G.cell = (css - G.pad * 2) / (N - 1);
+    LAYER = buildLayer();
+    draw();
+  }
+
+  function buildLayer() {
+    var size = G.size, pad = G.pad, cell = G.cell, dpr = G.dpr;
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(size * dpr);
+    cv.height = cv.width;
+    var c = cv.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // 木面
+    var wood = c.createLinearGradient(0, 0, size * 0.75, size);
+    wood.addColorStop(0, '#ecd9b3');
+    wood.addColorStop(0.45, '#e4c99a');
+    wood.addColorStop(1, '#d3b381');
+    c.fillStyle = wood;
+    c.fillRect(0, 0, size, size);
+
+    // 木纹（确定性随机，保证每次重绘一致）
+    var seed = 20240401;
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    c.lineCap = 'round';
+    var grains = Math.round(size * 0.55);
+    for (var g = 0; g < grains; g++) {
+      var x = rnd() * size, y0 = rnd() * size, len = size * (0.12 + rnd() * 0.55);
+      c.strokeStyle = 'rgba(122,88,46,' + (0.03 + rnd() * 0.07).toFixed(2) + ')';
+      c.lineWidth = 0.6 + rnd() * 1.6;
+      c.beginPath();
+      c.moveTo(x, y0);
+      c.bezierCurveTo(x + (rnd() - 0.5) * 9, y0 + len * 0.4, x + (rnd() - 0.5) * 9, y0 + len * 0.72, x, y0 + len);
+      c.stroke();
+    }
+
+    // 边缘暗角
+    var vg = c.createRadialGradient(size * 0.5, size * 0.5, size * 0.3, size * 0.5, size * 0.5, size * 0.78);
+    vg.addColorStop(0, 'rgba(90,58,26,0)');
+    vg.addColorStop(1, 'rgba(90,58,26,.17)');
+    c.fillStyle = vg;
+    c.fillRect(0, 0, size, size);
+
+    // 网格
+    var x0 = pad, x1 = size - pad;
+    c.strokeStyle = 'rgba(72,46,22,.86)';
+    c.lineWidth = Math.max(0.8, cell * 0.016);
+    for (var i = 0; i < N; i++) {
+      var p = pad + i * cell;
+      c.beginPath(); c.moveTo(x0, p); c.lineTo(x1, p); c.stroke();
+      c.beginPath(); c.moveTo(p, x0); c.lineTo(p, x1); c.stroke();
+    }
+    c.lineWidth = Math.max(1.2, cell * 0.028);
+    c.strokeRect(x0 - 0.5, x0 - 0.5, x1 - x0 + 1, x1 - x0 + 1);
+
+    // 星位
+    var stars = [[3, 3], [11, 3], [3, 11], [11, 11], [7, 7]];
+    c.fillStyle = 'rgba(60,38,16,.78)';
+    for (var s = 0; s < stars.length; s++) {
+      var sx = pad + stars[s][0] * cell, sy = pad + stars[s][1] * cell;
+      c.beginPath();
+      c.arc(sx, sy, Math.max(2.2, cell * 0.085), 0, TAU);
+      c.fill();
+    }
+
+    // 坐标
+    var fs = Math.max(9, Math.round(cell * 0.3));
+    c.font = '500 ' + fs + 'px system-ui,-apple-system,"PingFang SC",sans-serif';
+    c.fillStyle = 'rgba(76,50,24,.5)';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    var letters = 'ABCDEFGHIJKLMNO';
+    for (var k = 0; k < N; k++) {
+      c.fillText(letters.charAt(k), pad + k * cell, pad - cell * 0.46);
+      c.fillText(String(k + 1), pad - cell * 0.46, pad + k * cell);
+    }
+
+    return cv;
+  }
+
+  function stone(x, y, r, kind) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.34)';
+    ctx.shadowBlur = r * 0.55;
+    ctx.shadowOffsetY = r * 0.16;
+    var g = ctx.createRadialGradient(x - r * 0.34, y - r * 0.4, r * 0.12, x, y, r * 1.12);
+    if (kind === 'b') {
+      g.addColorStop(0, '#6b7379');
+      g.addColorStop(0.35, '#343c42');
+      g.addColorStop(0.78, '#171c20');
+      g.addColorStop(1, '#0a0e11');
+    } else {
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.45, '#fbf8f0');
+      g.addColorStop(0.85, '#e6dfcd');
+      g.addColorStop(1, '#cdc3ad');
+    }
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    ctx.restore();
+
+    // 反光
+    var h = ctx.createRadialGradient(x - r * 0.34, y - r * 0.42, r * 0.02, x - r * 0.34, y - r * 0.42, r * 0.66);
+    h.addColorStop(0, kind === 'b' ? 'rgba(255,255,255,.30)' : 'rgba(255,255,255,.85)');
+    h.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = h;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+
+    // 边缘
+    ctx.strokeStyle = kind === 'b' ? 'rgba(255,255,255,.12)' : 'rgba(96,80,48,.24)';
+    ctx.lineWidth = Math.max(0.7, r * 0.07);
+    ctx.beginPath(); ctx.arc(x, y, r - Math.max(0.4, r * 0.035), 0, TAU); ctx.stroke();
+  }
+
+  function draw() {
+    if (!LAYER) return;
+    var size = G.size;
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(LAYER, 0, 0, size, size);
+
+    for (var i = 0; i < TOTAL; i++) {
+      if (!board[i]) continue;
+      var p = pt(i);
+      stone(p.x, p.y, G.cell * 0.445, board[i] === BLACK ? 'b' : 'w');
+    }
+
+    // 最后一手标记
+    if (S.moves.length) {
+      var last = S.moves[S.moves.length - 1];
+      if (last >= 0 && last < TOTAL) {
+        var q = pt(last);
+        var mr = Math.max(2.4, G.cell * 0.075);
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, mr, 0, TAU);
+        ctx.fillStyle = '#c9a35b';
+        ctx.fill();
+      }
+    }
+
+    // 获胜连线
+    if (S.win && S.win.line.length >= 5) {
+      var a = pt(S.win.line[0]);
+      var b = pt(S.win.line[S.win.line.length - 1]);
+      ctx.strokeStyle = 'rgba(201,163,91,.82)';
+      ctx.lineWidth = Math.max(2, G.cell * 0.05);
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(201,163,91,.9)';
+      ctx.lineWidth = 1.6;
+      for (var w = 0; w < S.win.line.length; w++) {
+        var rp = pt(S.win.line[w]);
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, G.cell * 0.5, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    // 落子预览
+    if (S.hover >= 0 && !board[S.hover] && canPlace()) {
+      var hp = pt(S.hover);
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      stone(hp.x, hp.y, G.cell * 0.445, S.color === BLACK ? 'b' : 'w');
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(201,163,91,.45)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(hp.x, hp.y, G.cell * 0.5, 0, TAU); ctx.stroke();
+    }
+  }
+
+  function hitTest(e) {
+    var rect = canvas.getBoundingClientRect();
+    if (!rect.width || !G.size) return -1;
+    var x = (e.clientX - rect.left) * (G.size / rect.width);
+    var y = (e.clientY - rect.top) * (G.size / rect.height);
+    var c = Math.round((x - G.pad) / G.cell);
+    var r = Math.round((y - G.pad) / G.cell);
+    if (r < 0 || r >= N || c < 0 || c >= N) return -1;
+    return r * N + c;
+  }
+
+  /* ================= 事件 ================= */
+  canvas.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'touch') return;
+    var idx = hitTest(e);
+    if (idx !== S.hover) { S.hover = idx; draw(); }
+  });
+
+  canvas.addEventListener('pointerleave', function () {
+    if (S.hover !== -1) { S.hover = -1; draw(); }
+  });
+
+  canvas.addEventListener('click', function (e) {
+    var idx = hitTest(e);
+    if (idx >= 0) play(idx);
+  });
+
+  el.joinBtn.addEventListener('click', function () {
+    var name = (el.nameInput.value || '').trim().slice(0, 12) || '棋手';
+    S.name = name;
+    save('gmk_name', name);
+    var room = normalizeRoom(el.roomInput.value);
+    if (!room) { toast('请输入房间号'); el.roomInput.focus(); return; }
+    el.roomInput.value = room;
+    save('gmk_room', room);
+    joinRoom(room);
+  });
+
+  el.nameInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') el.joinBtn.click();
+  });
+  el.roomInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') el.joinBtn.click();
+  });
+
+  el.copyBtn.addEventListener('click', function () {
+    var url = location.origin + location.pathname + '#room=' + encodeURIComponent(S.room);
+    var done = function () { toast('邀请链接已复制，发给朋友即可入场'); };
+    var fallback = function (u) { window.prompt('复制这条邀请链接发给朋友：', u); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () { fallback(url); });
+    } else {
+      fallback(url);
+    }
+  });
+
+  el.undoBtn.addEventListener('click', askUndo);
+  el.restartBtn.addEventListener('click', askRestart);
+  el.leaveBtn.addEventListener('click', leaveRoom);
+
+  el.promptYes.addEventListener('click', function () { replyPrompt(true); });
+  el.promptNo.addEventListener('click', function () { replyPrompt(false); });
+
+  el.chatSend.addEventListener('click', sendChat);
+  el.chatInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+  });
+
+  el.connChip.addEventListener('click', function () {
+    if (!S.connected) retryConnect();
+    else toast(S.channel ? '连接正常' : '连接正常，可以进入房间了');
+  });
+
+  /* 断线重连 / 回到前台时同步 */
+  function resync(msg) {
+    if (!S.channel) return;
+    if (!S.connected) { retryConnect(); return; }
+    if (!S.subscribed) { subscribe(); return; }
+    send({ type: 'hello', name: S.name, color: S.color });
+    send({ type: 'state-req' });
+    if (msg) sysMsg(msg);
+  }
+
+  window.addEventListener('online', function () { resync('网络已恢复，正在重新同步局面'); });
+  window.addEventListener('offline', function () { if (S.channel) setChip('err', '网络已断开'); });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) resync();
+  });
+
+  /* 心跳：维持在场、检测掉线、超时取消请求 */
+  setInterval(function () {
+    if (!S.channel) return;
+    if (S.connected && S.subscribed) send({ type: 'ping' });
+
+    var o = opponent();
+    if (o && (Date.now() - o.last) > PEER_FORGET) S.peers.delete(o.uid);
+
+    if (S.sent && (Date.now() - S.sent.at) > 25000) {
+      S.sent = null;
+      toast('对手没有回应，请求已取消');
+    }
+    if (S.connected && !S.subscribed) subscribe();
+    syncUI();
+  }, 4000);
+
+  /* 尺寸变化 */
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { measure(); draw(); }, 120);
+  });
+  if (window.ResizeObserver && canvas.parentElement) {
+    new ResizeObserver(function () { measure(); draw(); }).observe(canvas.parentElement);
+  }
+
+  /* ================= 启动 ================= */
+  function readHashRoom() {
+    var m = /(?:^#|&)room=([^&]*)/.exec(location.hash || '');
+    if (!m) return '';
+    try { return decodeURIComponent(m[1]).slice(0, 12); } catch (e) { return ''; }
+  }
+
+  function boot() {
+    var savedName = '', savedRoom = '';
+    try {
+      savedName = localStorage.getItem('gmk_name') || '';
+      savedRoom = localStorage.getItem('gmk_room') || '';
+    } catch (e) {}
+    el.nameInput.value = savedName || ('棋手' + (100 + Math.floor(Math.random() * 900)));
+    var hashRoom = readHashRoom();
+    el.roomInput.value = hashRoom || savedRoom || String(1000 + Math.floor(Math.random() * 9000));
+
+    S.name = el.nameInput.value.trim();
+    renderChat();
+    syncUI();
+    measure();
+    draw();
+
+    if (hashRoom) S.pendingRoom = normalizeRoom(hashRoom);
+    initGeo();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
