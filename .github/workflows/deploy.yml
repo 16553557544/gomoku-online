@@ -1,4 +1,4 @@
-name: Deploy gomoku-online
+name: Build site from published source
 
 on:
   push:
@@ -6,20 +6,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
+  contents: write
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,17 +20,19 @@ jobs:
         run: |
           curl -sSL --max-time 60 "$SRC" -o page.html
           python3 tools/strip.py
-          sha=$(sha256sum site/index.html | awk '{print $1}')
+          cp site/index.html index.html
+          sha=$(sha256sum index.html | awk '{print $1}')
           echo "sha256=$sha"
           test "$sha" = "32bb672a7210c1d78cd96a61647b1187ccfbc9278fc428e0aebca42a97d59471"
 
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - id: deploy
-        uses: actions/deploy-pages@v4
+      - name: Commit rebuilt index.html
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "index.html unchanged"
+          else
+            git commit -m "Rebuild index.html from published source"
+            git push
+          fi
